@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Climb Visualizer</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="visualizer.css">
+</head>
+<body>
+
+<header>
+  <h1><span>//</span> climb-viz</h1>
+  <select id="ride-select"></select>
+  <div class="stats" id="stats"></div>
+</header>
+
+<div class="main">
+  <div id="map"></div>
+  <div class="profile-wrap">
+    <canvas id="profile"></canvas>
+    <div class="tooltip" id="tooltip"></div>
+    <div class="no-climbs" id="no-climbs">no climbs detected</div>
+  </div>
+</div>
+
+<script>
+const map = L.map('map', {
+  zoomControl: false,
+  attributionControl: false,
+});
+L.control.zoom({ position: 'topright' }).addTo(map);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  maxZoom: 19,
+}).addTo(map);
+
+let traceLine = null;
+let climbLines = [];
+let hoverMarker = null;
+
+const canvas = document.getElementById('profile');
+const ctx = canvas.getContext('2d');
+const tooltipEl = document.getElementById('tooltip');
+const noClimbsEl = document.getElementById('no-climbs');
+const statsEl = document.getElementById('stats');
+const selectEl = document.getElementById('ride-select');
+
+let rides = [];
+let currentRide = null;
+
+function css(prop) {
+  return getComputedStyle(document.documentElement).getPropertyValue(prop).trim();
+}
+
+// ---- Climb category helpers ----
+
+function categoryLabel(cat) {
+  if (cat === 'HC') return 'HC';
+  if (cat) return 'Cat ' + cat;
+  return '';
+}
+
+function categoryColor(cat) {
+  switch (cat) {
+    case 'HC': return '#ef4444';
+    case '1':  return '#f97316';
+    case '2':  return '#eab308';
+    case '3':  return '#22c55e';
+    case '4':  return '#6b7280';
+    default:   return '#6b7280';
+  }
+}
+
+// ---- Tooltip builder (safe DOM methods) ----
+
+function buildTooltip(pt, inClimb) {
+  tooltipEl.textContent = '';
+
+  function addLine(label, value) {
+    const row = document.createElement('div');
+    const lbl = document.createElement('span');
+    lbl.className = 'label';
+    lbl.textContent = label + ' ';
+    row.appendChild(lbl);
+    row.appendChild(document.createTextNode(value));
+    tooltipEl.appendChild(row);
+  }
+
+  addLine('dist', (pt.d / 1000).toFixed(2) + ' km');
+  addLine('elev', Math.round(pt.elev) + ' m');
+
+  if (inClimb) {
+    const tag = document.createElement('div');
+    tag.className = 'climb-tag';
+    const catText = categoryLabel(inClimb.category);
+    tag.textContent = (catText ? catText + ' · ' : '') + (inClimb.avg_grade * 100).toFixed(1) + '% avg';
+    if (inClimb.category) tag.style.color = categoryColor(inClimb.category);
+    tooltipEl.appendChild(tag);
+  }
+}
+
+// ---- Stats builder (safe DOM methods) ----
+
+function addStat(container, value, unit) {
+  const div = document.createElement('div');
+  const valSpan = document.createElement('span');
+  valSpan.className = 'stat-val';
+  valSpan.textContent = value;
+  const unitSpan = document.createElement('span');
+  unitSpan.className = 'stat-unit';
+  unitSpan.textContent = unit;
+  div.appendChild(valSpan);
+  div.appendChild(unitSpan);
+  container.appendChild(div);
+}
+
+// ---- Data loading ----
+
+fetch('viz_data.json')
+  .then(r => r.json())
+  .then(data => {
+    rides = data;
+    rides.forEach((r, i) => {
+      const opt = document.createElement('option');
+      opt.value = i;
+      opt.textContent = r.name.replace(/_/g, ' ');
+      selectEl.appendChild(opt);
+    });
+    const famousIdx = rides.findIndex(r => r.name.startsWith('famous_'));
+    selectEl.value = famousIdx >= 0 ? famousIdx : 0;
+    loadRide(parseInt(selectEl.value));
+  });
+
+selectEl.addEventListener('change', () => loadRide(parseInt(selectEl.value)));
+
+function loadRide(idx) {
+  currentRide = rides[idx];
+  updateMap();
+  updateStats();
+  drawProfile();
+}
+
+// ---- Map ----
+
+function updateMap() {
+  if (traceLine) map.removeLayer(traceLine);
+  climbLines.forEach(l => map.removeLayer(l));
+  climbLines = [];
+  if (hoverMarker) { map.removeLayer(hoverMarker); hoverMarker = null; }
+
+  const pts = currentRide.points;
+  const latlngs = pts.map(p => [p.lat, p.lon]);
+
+  traceLine = L.polyline(latlngs, {
+    color: css('--trace'),
+    weight: 3,
+    opacity: 0.7,
+  }).addTo(map);
+
+  currentRide.climbs.forEach(c => {
+    const climbLatLngs = latlngs.slice(c.start_idx, c.end_idx + 1);
+    const climbColor = c.category ? categoryColor(c.category) : css('--accent');
+    const line = L.polyline(climbLatLngs, {
+      color: climbColor,
+      weight: 4,
+      opacity: 0.9,
+    }).addTo(map);
+    climbLines.push(line);
+  });
+
+  map.fitBounds(traceLine.getBounds(), { padding: [40, 40] });
+}
+
+// ---- Stats ----
+
+function updateStats() {
+  statsEl.textContent = '';
+  const pts = currentRide.points;
+  const totalDist = pts[pts.length - 1].d;
+  const elevs = pts.map(p => p.elev);
+  const minElev = Math.min(...elevs);
+  const maxElev = Math.max(...elevs);
+
+  addStat(statsEl, (totalDist / 1000).toFixed(1), 'km');
+  if (currentRide.moving_time_s != null) {
+    const s = currentRide.moving_time_s;
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    addStat(statsEl, h + 'h ' + m + 'm', 'moving');
+  }
+  addStat(statsEl, Math.round(minElev).toString(), 'm lo');
+  addStat(statsEl, Math.round(maxElev).toString(), 'm hi');
+
+  if (currentRide.climbs.length > 0) {
+    const totalClimbDist = currentRide.climbs.reduce((s, c) => s + c.dist_m, 0);
+    const totalClimbGain = currentRide.climbs.reduce((s, c) => s + c.gain_m, 0);
+    addStat(statsEl, currentRide.climbs.length.toString(), 'climbs');
+    addStat(statsEl, (totalClimbDist / 1000).toFixed(1), 'km climbing');
+    addStat(statsEl, Math.round(totalClimbGain).toString(), 'm gain');
+  }
+}
+
+// ---- Elevation profile ----
+
+const PAD = { top: 24, right: 20, bottom: 28, left: 52 };
+
+function drawProfile() {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.parentElement.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  canvas.style.width = rect.width + 'px';
+  canvas.style.height = rect.height + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+  const w = rect.width;
+  const h = rect.height;
+  const plotW = w - PAD.left - PAD.right;
+  const plotH = h - PAD.top - PAD.bottom;
+
+  const pts = currentRide.points;
+  if (pts.length < 2) return;
+
+  const maxD = pts[pts.length - 1].d;
+  const elevs = pts.map(p => p.elev);
+  const minE = Math.min(...elevs);
+  const maxE = Math.max(...elevs);
+  const eRange = maxE - minE || 1;
+  const ePad = eRange * 0.08;
+  const eMin = minE - ePad;
+  const eMax = maxE + ePad;
+  const eSpan = eMax - eMin;
+
+  const xOf = d => PAD.left + (d / maxD) * plotW;
+  const yOf = e => PAD.top + plotH - ((e - eMin) / eSpan) * plotH;
+
+  ctx.clearRect(0, 0, w, h);
+
+  // Grid
+  ctx.strokeStyle = css('--grid');
+  ctx.lineWidth = 1;
+  const nGridY = 5;
+  for (let i = 0; i <= nGridY; i++) {
+    const e = eMin + (eSpan * i) / nGridY;
+    const y = yOf(e);
+    ctx.beginPath();
+    ctx.moveTo(PAD.left, y);
+    ctx.lineTo(w - PAD.right, y);
+    ctx.stroke();
+  }
+
+  // Climb shading
+  currentRide.climbs.forEach(c => {
+    const x1 = xOf(pts[c.start_idx].d);
+    const x2 = xOf(pts[c.end_idx].d);
+    ctx.fillStyle = css('--climb-fill');
+    ctx.fillRect(x1, PAD.top, x2 - x1, plotH);
+  });
+
+  noClimbsEl.style.display = currentRide.climbs.length === 0 ? 'block' : 'none';
+
+  // Elevation fill
+  ctx.beginPath();
+  ctx.moveTo(xOf(pts[0].d), yOf(pts[0].elev));
+  for (let i = 1; i < pts.length; i++) {
+    ctx.lineTo(xOf(pts[i].d), yOf(pts[i].elev));
+  }
+  ctx.lineTo(xOf(pts[pts.length - 1].d), yOf(eMin));
+  ctx.lineTo(xOf(pts[0].d), yOf(eMin));
+  ctx.closePath();
+
+  const grad = ctx.createLinearGradient(0, PAD.top, 0, PAD.top + plotH);
+  grad.addColorStop(0, 'rgba(59, 130, 246, 0.25)');
+  grad.addColorStop(1, 'rgba(59, 130, 246, 0.02)');
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Elevation line
+  ctx.beginPath();
+  ctx.moveTo(xOf(pts[0].d), yOf(pts[0].elev));
+  for (let i = 1; i < pts.length; i++) {
+    ctx.lineTo(xOf(pts[i].d), yOf(pts[i].elev));
+  }
+  ctx.strokeStyle = css('--trace');
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Climb overlay + category labels
+  currentRide.climbs.forEach(c => {
+    const climbColor = c.category ? categoryColor(c.category) : css('--accent');
+
+    ctx.beginPath();
+    for (let i = c.start_idx; i <= c.end_idx; i++) {
+      const x = xOf(pts[i].d);
+      const y = yOf(pts[i].elev);
+      if (i === c.start_idx) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle = climbColor;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Category label
+    const label = categoryLabel(c.category);
+    if (label) {
+      const midIdx = Math.floor((c.start_idx + c.end_idx) / 2);
+      const lx = xOf(pts[midIdx].d);
+      // Find highest point in climb for label placement
+      let minY = Infinity;
+      for (let i = c.start_idx; i <= c.end_idx; i++) {
+        minY = Math.min(minY, yOf(pts[i].elev));
+      }
+      const ly = minY - 8;
+
+      ctx.font = '600 9px "JetBrains Mono", monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'bottom';
+      ctx.fillStyle = climbColor;
+      ctx.fillText(label, lx, ly);
+    }
+  });
+
+  // Axis labels
+  ctx.fillStyle = css('--text-muted');
+  ctx.font = '10px "JetBrains Mono", monospace';
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  for (let i = 0; i <= nGridY; i++) {
+    const e = eMin + (eSpan * i) / nGridY;
+    ctx.fillText(Math.round(e) + 'm', PAD.left - 6, yOf(e));
+  }
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  const nGridX = Math.min(8, Math.floor(plotW / 70));
+  for (let i = 0; i <= nGridX; i++) {
+    const d = (maxD * i) / nGridX;
+    ctx.fillText((d / 1000).toFixed(1) + 'km', xOf(d), PAD.top + plotH + 6);
+  }
+
+  // Store layout for hover
+  canvas._layout = { xOf, yOf, plotW, plotH, maxD, eMin, eSpan, pts, w, h };
+}
+
+// ---- Hover interaction ----
+
+canvas.addEventListener('mousemove', e => {
+  const layout = canvas._layout;
+  if (!layout) return;
+
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+
+  if (mx < PAD.left || mx > layout.w - PAD.right || my < PAD.top || my > PAD.top + layout.plotH) {
+    tooltipEl.style.display = 'none';
+    if (hoverMarker) { map.removeLayer(hoverMarker); hoverMarker = null; }
+    drawProfile();
+    return;
+  }
+
+  const d = ((mx - PAD.left) / layout.plotW) * layout.maxD;
+  const pts = layout.pts;
+
+  // Binary search for closest point
+  let lo = 0, hi = pts.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (pts[mid].d < d) lo = mid + 1;
+    else hi = mid;
+  }
+  if (lo > 0 && Math.abs(pts[lo - 1].d - d) < Math.abs(pts[lo].d - d)) lo--;
+  const pt = pts[lo];
+
+  // Check if in a climb
+  let inClimb = null;
+  for (const c of currentRide.climbs) {
+    if (lo >= c.start_idx && lo <= c.end_idx) { inClimb = c; break; }
+  }
+
+  // Redraw + crosshair
+  drawProfile();
+  const cx = layout.xOf(pt.d);
+  const cy = layout.yOf(pt.elev);
+
+  ctx.setLineDash([3, 3]);
+  ctx.strokeStyle = 'rgba(201, 209, 217, 0.3)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx, PAD.top);
+  ctx.lineTo(cx, PAD.top + layout.plotH);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(PAD.left, cy);
+  ctx.lineTo(layout.w - PAD.right, cy);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Dot
+  ctx.beginPath();
+  ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+  ctx.fillStyle = inClimb ? css('--accent') : css('--trace');
+  ctx.fill();
+
+  // Tooltip
+  buildTooltip(pt, inClimb);
+  tooltipEl.style.display = 'block';
+
+  const tw = tooltipEl.offsetWidth;
+  const th = tooltipEl.offsetHeight;
+  let tx = mx + 12;
+  let ty = my - th - 8;
+  if (tx + tw > layout.w) tx = mx - tw - 12;
+  if (ty < 0) ty = my + 12;
+  tooltipEl.style.left = tx + 'px';
+  tooltipEl.style.top = ty + 'px';
+
+  // Map marker
+  if (hoverMarker) map.removeLayer(hoverMarker);
+  hoverMarker = L.circleMarker([pt.lat, pt.lon], {
+    radius: 5,
+    color: inClimb ? '#f97316' : '#3b82f6',
+    fillColor: inClimb ? '#f97316' : '#3b82f6',
+    fillOpacity: 1,
+    weight: 2,
+  }).addTo(map);
+});
+
+canvas.addEventListener('mouseleave', () => {
+  tooltipEl.style.display = 'none';
+  if (hoverMarker) { map.removeLayer(hoverMarker); hoverMarker = null; }
+  drawProfile();
+});
+
+window.addEventListener('resize', () => { if (currentRide) drawProfile(); });
+</script>
+</body>
+</html>
