@@ -6,7 +6,7 @@ Claude Code was used for the following:
 - GPX file parsing in `export_viz_data.py`, as well as the moving time calculation. 
 
 # Ride Visualization with Climb Detection
-Run `uv run export_viz_data.py` to identify climbs from the gpx files in `data/`.
+First, run `uv run export_viz_data.py` to identify climbs from the gpx files in `data/`.
 
 Start the http server with `python3 -m http.server 8771 -d .` in the root directory of the repo.
 Then, navigate [here](localhost:8771/visualizer.html) to see a basic visualization (route map plus climb profile).
