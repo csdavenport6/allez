@@ -25,7 +25,7 @@ Four-step breakdown:
 
 ### Haversine Formula
 
-Longitude and latitude are angles, not flat x/y coordinates. The shortest path on Earth's surface is along a great circle, not a straight line on a flat map.
+Longitude and latitude are angles, not flat x/y coordinates. The shortest path on Earth's surface is along a great circle (the intersection of a sphere and a plane passing through the sphere's center), not a straight line on a flat map.
 
 If the two points are (lat1, lon1) and (lat2, lon2) in radians:
  • dlat = lat2 - lat1
