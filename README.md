@@ -1,4 +1,5 @@
 # What Is This?
+🚵‍♂️
 
 # AI Use
 Claude Code was used for the following:
@@ -14,12 +15,14 @@ Then, navigate [here](localhost:8771/visualizer.html) to see a basic visualizati
 ## Basic approach
 Four-step breakdown:
 1. Geospatial pre-processing to turn data of the form [(lat, long, elev, time)] into [(cumulative_distance_traveled, elev)]. 
-2. 
+2. Smoothing the noise out of the GPS elevation data.
+3. One-pass approach through the processed data to identify whether or not we are (still) in a climb with tunable thresholds for filtering and hysteresis for short flat or downhill sections
+4. Categorization of identified climbs based on COTACOL with TdF-inspired thresholds 
 
 ## More advanced techniques (TODO)
 - Better smoothing of GPS elevation data. Simplest approach uses a basic moving average, but something like a Gaussian kernel or a Savitzky-Golay filter would preserve shape better. The simple moving average flattens everything towards the mean, whereas SG fits a polynomial to each window and takes its center value, thus preserving the peaks and valleys.
 - Two-pass segmentation instead of a one-pass approach that commits greedily to being in a climb or not. 
-- 
+- Other things tooooo.....
 
 ## Misc
 
