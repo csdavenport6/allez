@@ -1,12 +1,16 @@
-# What Is This?
-🚵‍♂️
+# What Is This? 🚵‍♂️
+For me, the only thing that's more fun than riding my bike is looking at that sweet sweet post-ride data once the Strava upload hits. This is just a little playground for me to explore some of the nuts and bolts. 
 
-# AI Use
+# AI Disclaimer
 Claude Code was used for the following:
 - visualizer.{css,html} 
 - GPX file parsing in `export_viz_data.py`, as well as the moving time calculation. 
 
 # Ride Visualization with Climb Detection
+
+## GitHub Pages
+To see a visualization of the climbs detected from some sample GPX data overlaid on an OpenStreetMap map, you can go [here.](https://csdavenport6.github.io/allez/visualizer.html) 
+## Local Machine
 First, run `uv run export_viz_data.py` to identify climbs from the gpx files in `data/`.
 
 Start the http server with `python3 -m http.server 8771 -d .` in the root directory of the repo.
@@ -19,7 +23,7 @@ Four-step breakdown:
 3. One-pass approach through the processed data to identify whether or not we are (still) in a climb with tunable thresholds for filtering and hysteresis for short flat or downhill sections
 4. Categorization of identified climbs based on COTACOL with TdF-inspired thresholds 
 
-## More advanced techniques (TODO)
+## Improvements
 - Better smoothing of GPS elevation data. Simplest approach uses a basic moving average, but something like a Gaussian kernel or a Savitzky-Golay filter would preserve shape better. The simple moving average flattens everything towards the mean, whereas SG fits a polynomial to each window and takes its center value, thus preserving the peaks and valleys.
 - Two-pass segmentation instead of a one-pass approach that commits greedily to being in a climb or not. 
 - Other things tooooo.....
