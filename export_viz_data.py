@@ -7,7 +7,7 @@ import os
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from geo import RawPoint, haversine_m, preprocess_raw_points
-from climbs import detect_climbs
+from climbs import detect_climbs, total_elevation_gain
 
 
 def export_ride(name, raw_points):
@@ -62,7 +62,9 @@ def export_ride(name, raw_points):
                 moving += dt
         moving_time_s = round(moving)
 
-    ride = dict(name=name, points=pts, climbs=climb_data)
+    total_gain = round(total_elevation_gain(points))
+
+    ride = dict(name=name, points=pts, climbs=climb_data, total_gain_m=total_gain)
     if moving_time_s is not None:
         ride["moving_time_s"] = moving_time_s
     return ride

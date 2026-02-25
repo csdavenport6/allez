@@ -193,6 +193,9 @@ function updateStats() {
   }
   addStat(statsEl, Math.round(minElev).toString(), 'm lo');
   addStat(statsEl, Math.round(maxElev).toString(), 'm hi');
+  if (currentRide.total_gain_m != null) {
+    addStat(statsEl, currentRide.total_gain_m.toString(), 'm gain');
+  }
 
   if (currentRide.climbs.length > 0) {
     const totalClimbDist = currentRide.climbs.reduce((s, c) => s + c.dist_m, 0);

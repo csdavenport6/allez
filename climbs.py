@@ -42,10 +42,30 @@ def smooth_elevation_basic(points: List[Point], window: int = 5) -> List[Point]:
 
 
 def smooth_elevation_savgol(
-    points: List[Point], window: int = 5, poly_order: int = 2
+    points: List[Point], window: int = 11, poly_order: int = 2
 ) -> List[Point]:
-    out = []
-    return out
+    if len(points) < window:
+        return points[:]
+    import numpy as np
+
+    elevs = np.array([p.e for p in points])
+
+    # Ensure window is odd
+    if window % 2 == 0:
+        window += 1
+
+    half = window // 2
+    # Build Vandermonde matrix centered at 0
+    x = np.arange(-half, half + 1, dtype=float)
+    A = np.vander(x, N=poly_order + 1, increasing=True)
+    # Coefficients: row 0 of (A^T A)^{-1} A^T gives the smoothing weights
+    coeffs = np.linalg.pinv(A)[0]
+
+    # Pad edges by reflection
+    padded = np.concatenate([elevs[half:0:-1], elevs, elevs[-2:-half - 2:-1]])
+    smoothed = np.convolve(padded, coeffs[::-1], mode='valid')
+
+    return [Point(p.d, float(s)) for p, s in zip(points, smoothed)]
 
 
 # Categorization based on Fiets index (cotacol) with standard TdF thresholds
@@ -63,6 +83,17 @@ def categorize_climb(gain_m: float, dist_m: float) -> str:
         return "4"
     else:
         return ""
+
+
+def total_elevation_gain(points: List[Point]) -> float:
+    """Compute total elevation gain over smoothed points."""
+    smoothed = smooth_elevation_savgol(points)
+    gain = 0.0
+    for i in range(1, len(smoothed)):
+        de = smoothed[i].e - smoothed[i - 1].e
+        if de > 0:
+            gain += de
+    return gain
 
 
 def summarize(points: List[Point], s: int, t: int) -> Climb:
@@ -88,7 +119,7 @@ def detect_climbs(points: List[Point]) -> List[Climb]:
     if len(points) < 2:
         return []
 
-    _points = smooth_elevation_basic(points, window=5)
+    _points = smooth_elevation_savgol(points, window=11, poly_order=2)
 
     # Thresholds
     MIN_DIST = 400.0  # meters
