@@ -110,7 +110,7 @@ def load_gpx_rides(data_dir="data"):
     if not os.path.isdir(data_dir):
         return rides
     for path in sorted(glob.glob(os.path.join(data_dir, "*.gpx"))):
-        name = "gpx_" + os.path.splitext(os.path.basename(path))[0]
+        name = os.path.splitext(os.path.basename(path))[0]
         rides[name] = parse_gpx(path)
     return rides
 
