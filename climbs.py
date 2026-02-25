@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from typing import List
+import numpy as np
 
 
 @dataclass
@@ -46,7 +47,6 @@ def smooth_elevation_savgol(
 ) -> List[Point]:
     if len(points) < window:
         return points[:]
-    import numpy as np
 
     elevs = np.array([p.e for p in points])
 
@@ -62,8 +62,8 @@ def smooth_elevation_savgol(
     coeffs = np.linalg.pinv(A)[0]
 
     # Pad edges by reflection
-    padded = np.concatenate([elevs[half:0:-1], elevs, elevs[-2:-half - 2:-1]])
-    smoothed = np.convolve(padded, coeffs[::-1], mode='valid')
+    padded = np.concatenate([elevs[half:0:-1], elevs, elevs[-2 : -half - 2 : -1]])
+    smoothed = np.convolve(padded, coeffs[::-1], mode="valid")
 
     return [Point(p.d, float(s)) for p, s in zip(points, smoothed)]
 
