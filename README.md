@@ -11,10 +11,9 @@ Claude Code was used for the following:
 ## GitHub Pages
 To see a visualization of the climbs detected from some sample GPX data overlaid on an OpenStreetMap map, you can go [here.](https://csdavenport6.github.io/allez/visualizer.html) 
 ## Local Machine
-First, run `uv run export_viz_data.py` to identify climbs from the gpx files in `data/`.
+Feel free to clone the repo to try it out with your own ride data. After cloning, first add your GPX files to `data/`. Then, run `uv run export_viz_data.py` to identify climbs and export JSON for the visualizer.
 
-Start the http server with `python3 -m http.server 8771 -d .` in the root directory of the repo.
-Then, navigate to `localhost:8771/visualizer.html` to see a basic visualization (route map plus climb profile).
+Start the http server with `python3 -m http.server 8771 -d .`, then, navigate to `localhost:8771/visualizer.html` and use the dropdown in the top left corner of the page choose the ride you want to see. 
 
 ## Basic approach
 Four-step breakdown:
