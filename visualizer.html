@@ -202,7 +202,7 @@ function updateStats() {
     const totalClimbGain = currentRide.climbs.reduce((s, c) => s + c.gain_m, 0);
     addStat(statsEl, currentRide.climbs.length.toString(), 'climbs');
     addStat(statsEl, (totalClimbDist / 1000).toFixed(1), 'km climbing');
-    addStat(statsEl, Math.round(totalClimbGain).toString(), 'm gain');
+    addStat(statsEl, Math.round(totalClimbGain).toString(), 'm gain on climbs');
   }
 }
 
